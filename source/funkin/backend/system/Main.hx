@@ -1,0 +1,304 @@
+package funkin.backend.system;
+
+import flixel.FlxG;
+import flixel.FlxGame;
+import flixel.FlxState;
+import flixel.addons.transition.FlxTransitionSprite.GraphicTransTileDiamond;
+import flixel.addons.transition.FlxTransitionableState;
+import flixel.addons.transition.TransitionData;
+import flixel.graphics.FlxGraphic;
+import flixel.math.FlxPoint;
+import flixel.math.FlxRect;
+import flixel.system.ui.FlxSoundTray;
+import funkin.backend.assets.AssetsLibraryList;
+import funkin.backend.system.framerate.Framerate;
+import funkin.backend.system.framerate.SystemInfo;
+import funkin.backend.system.modules.*;
+import funkin.backend.utils.ThreadUtil;
+import funkin.editors.SaveWarning;
+import funkin.options.PlayerSettings;
+import openfl.Assets;
+import openfl.Lib;
+import openfl.display.Sprite;
+import openfl.text.TextFormat;
+import openfl.utils.AssetLibrary;
+import openfl.events.Event;
+import sys.FileSystem;
+import sys.io.File;
+#if android
+import android.content.Context;
+import android.os.Build;
+#end
+import funkin.backend.chart.EventsData;
+import funkin.menus.TitleState;
+
+@:access(flixel.FlxGame)
+class Main extends FlxGame
+{
+	public static var instance:Main;
+
+	public static var forceGPUOnlyBitmapsOff:Bool = #if desktop false #else true #end;
+	public static var noTerminalColor:Bool = false;
+	public static var verbose:Bool = false;
+
+	public static var scaleMode:FunkinRatioScaleMode;
+	#if !mobile
+	public static var framerateSprite:Framerate;
+	#end
+
+	var gameWidth:Int = 1280; // Width of the game in pixels (might be less / more in actual pixels).
+	var gameHeight:Int = 720; // Height of the game in pixels (might be less / more in actual pixels).
+	var skipSplash:Bool = true; // Whether to skip the flixel splash screen that appears in release mode.
+	var startFullscreen:Bool = false; // Whether to start the game in fullscreen on desktop targets
+
+	/**
+	 * The time since the game was focused last time in seconds.
+	 */
+	public static var timeSinceFocus(get, never):Float;
+
+	public static var time:Int = 0;
+
+	public static function preInit()
+	{
+		funkin.backend.utils.NativeAPI.registerAsDPICompatible();
+		funkin.backend.system.CommandLineHandler.parseCommandLine(Sys.args());
+		funkin.backend.system.Main.fixWorkingDirectory();
+	}
+
+	public function new()
+	{
+		instance = this;
+
+		CrashHandler.init();
+
+		super(gameWidth, gameHeight, FlxState, Options.framerate, Options.framerate, skipSplash, startFullscreen);
+	}
+
+	var skipNextTickUpdate:Bool = false;
+	var _gameInitialized:Bool = false;
+
+	public override function switchState()
+	{
+		if (scaleMode != null)
+			scaleMode.resetSize();
+
+		super.switchState();
+
+		draw();
+		_total = ticks = getTicks();
+		skipNextTickUpdate = true;
+
+		@:privateAccess {
+			for (length => pool in openfl.display3D.utils.UInt8Buff._pools)
+			{
+				for (b in pool.clear())
+					b.destroy();
+			}
+
+			openfl.display3D.utils.UInt8Buff._pools.clear();
+		}
+
+		MemoryUtil.clearMajor();
+	}
+
+	public override function update()
+	{
+		super.update();
+
+		if (PlayerSettings.solo.controls.DEV_CONSOLE)
+			NativeAPI.allocConsole();
+
+		if (PlayerSettings.solo.controls.FPS_COUNTER)
+			Framerate.debugMode = (Framerate.debugMode + 1) % 3;
+	}
+
+	public override function onFocus(e:Event)
+	{
+		super.onFocus(e);
+		_tickFocused = ticks;
+	}
+
+	public override function onEnterFrame(t)
+	{
+		if (!_gameInitialized && FlxG.game != null)
+		{
+			_gameInitialized = true;
+			initGame();
+		}
+		if (skipNextTickUpdate != (skipNextTickUpdate = false))
+			_total = ticks = getTicks();
+		super.onEnterFrame(t);
+	}
+
+	public function initGame()
+	{
+		loadGameSettings();
+
+		#if (!mobile && !web)
+		Lib.current.stage.addChild(framerateSprite = new Framerate());
+		SystemInfo.init();
+		#end
+
+		#if sys
+		CoolUtil.deleteFolder('./.temp/');
+		#end
+		Options.save();
+
+		ControlsUtil.resetCustomControls();
+		FlxG.bitmap.reset();
+		FlxG.sound.destroy(true);
+
+		Paths.assetsTree.reset();
+
+		#if GLOBAL_SCRIPT
+		funkin.backend.scripting.GlobalScript.destroy();
+		#end
+		funkin.backend.scripting.Script.staticVariables.clear();
+
+		Flags.reset();
+		Flags.load();
+		funkin.savedata.FunkinSave.init();
+
+		TranslationUtil.findAllLanguages();
+		TranslationUtil.setLanguage(Flags.DISABLE_LANGUAGES ? Flags.DEFAULT_LANGUAGE : null);
+		MusicBeatTransition.script = Flags.DEFAULT_TRANSITION_SCRIPT;
+		WindowUtils.resetAffixes(false);
+		WindowUtils.setWindow();
+		Main.refreshAssets();
+		DiscordUtil.init();
+		EventsData.reloadEvents();
+		ControlsUtil.loadCustomControls();
+		TitleState.initialized = false;
+
+		if (Framerate.isLoaded)
+			Framerate.instance.reload();
+
+		#if sys
+		CoolUtil.safeAddAttributes('./.temp/', NativeAPI.FileAttribute.HIDDEN);
+		#end
+
+		var startState:Class<FlxState> = Flags.DISABLE_WARNING_SCREEN ? TitleState : funkin.menus.WarningState;
+		FlxG.switchState(cast Type.createInstance(startState, []));
+	}
+
+	@:dox(hide)
+	public static var audioDisconnected:Bool = false;
+
+	public static var changeID:Int = 0;
+	public static var pathBack =
+		#if (windows || linux)
+		"../../../../"
+		#elseif mac
+		"../../../../../../../"
+		#else
+		"../../../../"
+		#end;
+	public static var startedFromSource:Bool = #if TEST_BUILD true #else false #end;
+
+	@:dox(hide) public static function execAsync(func:Void->Void)
+		ThreadUtil.execAsync(func);
+
+	private static function __getTimer():Int
+	{
+		return time = Lib.getTimer();
+	}
+
+	public static function loadGameSettings()
+	{
+		WindowUtils.init();
+		SaveWarning.init();
+		MemoryUtil.init();
+		@:privateAccess
+		FlxG.game.getTimer = __getTimer;
+		FunkinCache.init();
+		Paths.assetsTree = new AssetsLibraryList();
+
+		ShaderResizeFix.init();
+		Logs.init();
+		Paths.init();
+
+		hscript.Interp.importRedirects = funkin.backend.scripting.Script.getDefaultImportRedirects();
+
+		#if GLOBAL_SCRIPT
+		funkin.backend.scripting.GlobalScript.init();
+		#end
+
+		var lib = new AssetLibrary();
+		@:privateAccess
+		lib.__proxy = Paths.assetsTree;
+		Assets.registerLibrary('default', lib);
+
+		funkin.options.PlayerSettings.init();
+		Options.load();
+
+		FlxG.fixedTimestep = false;
+
+		FlxG.scaleMode = scaleMode = new FunkinRatioScaleMode();
+
+		Conductor.init();
+		AudioSwitchFix.init();
+		EventManager.init();
+
+		FlxG.mouse.useSystemCursor = true;
+		#if DARK_MODE_WINDOW
+		if (funkin.backend.utils.NativeAPI.hasVersion("Windows 10"))
+			funkin.backend.utils.NativeAPI.redrawWindowHeader();
+		#end
+
+		initTransition();
+	}
+
+	public static function refreshAssets() @:privateAccess {
+		FunkinCache.instance.clearSecondLayer();
+
+		var game = FlxG.game;
+		var daSndTray = Type.createInstance(game._customSoundTray = funkin.menus.ui.FunkinSoundTray, []);
+		var index:Int = game.numChildren - 1;
+
+		if (game.soundTray != null)
+		{
+			var newIndex:Int = game.getChildIndex(game.soundTray);
+			if (newIndex != -1)
+				index = newIndex;
+			game.removeChild(game.soundTray);
+			game.soundTray.__cleanup();
+		}
+
+		game.addChildAt(game.soundTray = daSndTray, index);
+	}
+
+	public static function initTransition()
+	{
+		var diamond:FlxGraphic = FlxGraphic.fromClass(GraphicTransTileDiamond);
+		diamond.persist = true;
+		diamond.destroyOnNoUse = false;
+
+		FlxTransitionableState.defaultTransIn = new TransitionData(FADE, 0xFF000000, 1, new FlxPoint(0, -1), {asset: diamond, width: 32, height: 32},
+			new FlxRect(-200, -200, FlxG.width * 1.4, FlxG.height * 1.4));
+		FlxTransitionableState.defaultTransOut = new TransitionData(FADE, 0xFF000000, 0.7, new FlxPoint(0, 1), {asset: diamond, width: 32, height: 32},
+			new FlxRect(-200, -200, FlxG.width * 1.4, FlxG.height * 1.4));
+	}
+
+	public static var noCwdFix:Bool = false;
+
+	public static function fixWorkingDirectory()
+	{
+		#if windows
+		if (!noCwdFix && !sys.FileSystem.exists('manifest/default.json'))
+		{
+			Sys.setCwd(haxe.io.Path.directory(Sys.programPath()));
+		}
+		#elseif android
+		Sys.setCwd(haxe.io.Path.addTrailingSlash(VERSION.SDK_INT > 30 ? Context.getObbDir() : Context.getExternalFilesDir()));
+		#elseif (ios || switch)
+		Sys.setCwd(haxe.io.Path.addTrailingSlash(openfl.filesystem.File.applicationStorageDirectory.nativePath));
+		#end
+	}
+
+	private static var _tickFocused:Float = 0;
+
+	public static function get_timeSinceFocus():Float
+	{
+		return (FlxG.game.ticks - _tickFocused) / 1000;
+	}
+}
