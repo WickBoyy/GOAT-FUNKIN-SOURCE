@@ -43,7 +43,7 @@ class Flags
 	@:lazy public static var TITLE:String = Application.current.meta.get('name');
 	@:lazy public static var VERSION:String = Application.current.meta.get('version');
 
-	@:lazy public static var VERSION_MESSAGE:String = 'Codename Engine v$VERSION';
+	@:lazy public static var VERSION_MESSAGE:String = 'Goat Funkin: v$VERSION';
 
 	public static var REPO_NAME:String = "CodenameEngine";
 	public static var REPO_OWNER:String = "CodenameCrew";
