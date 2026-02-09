@@ -666,21 +666,13 @@
 	</group>
 
 	<group name="SaveWarning" prefix="saveWarning.">
-		<str id="warningTitle">Mudanças não guardadas!</str>
-		<str id="warningDesc">Quaisquer mudanças serão perdidas se não as guardar. (Não serão recuperáveis)\n\n\nGostaria de Cancelar?</str>
+		<str id="warningTitle">Alterações Não Guardadas!</str>
+		<str id="warningDesc">As suas alterações serão perdidas se não as guardar. (Não podem ser recuperadas)\n\n\nGostaria de cancelar?</str>
 
 		<str id="exitGame">Sair do Jogo</str>
 		<str id="exitToMenu">Sair Para Menu</str>
 		<str id="saveAndExitGame">Guardar e Sair do Jogo</str>
 		<str id="saveAndExitToMenu">Guardar e Sair Para Menu</str>
 		<str id="cancel">Cancelar</str>
-	</group>
-
-	<group name="ModConfigWarning" prefix="modConfigWarning.">
-		<str id="warningTitle">Configuração da pasta do mod em falta!</str>
-		<str id="warningDesc">Está a faltar um ficheiro de configurações ao seu mod!\n\nGostaria de criar um automaticamente?\n\n(PS: Se este mod não for seu, por favor desative o Modo de desenvolvedor para fazer esta notificação parar de aparecer.)</str>
-
-		<str id="createdTitle">Config. de mod criada!</str>
-		<str id="createdDesc">As configurações do seu mod foram criadas em {0}!</str>
 	</group>
 </language>

@@ -647,7 +647,7 @@
 	</group>
 
 	<group name="SaveWarning" prefix="saveWarning.">
-		<str id="warningTitle">Niezapisane Zmiany!</str>
+		<str id="warningTitle">Niezapisane zmiany!</str>
 		<str id="warningDesc">Twoje zmiany znikną jeśli nie zostaną zapisane. (Nie mogą być przywrócone)\n\n\nCzy chcesz anulować?</str>
 
 		<str id="exitGame">Wyjdź z Gry</str>
@@ -655,13 +655,5 @@
 		<str id="saveAndExitGame">Zapisz i Wyjdź z Gry</str>
 		<str id="saveAndExitToMenu">Zapisz i Wyjdź do Menu</str>
 		<str id="cancel">Anuluj</str>
-	</group>
-
-	<group name="ModConfigWarning" prefix="modConfigWarning.">
-		<str id="warningTitle">Brakujący plik konfiguracyjny modu!</str>
-		<str id="warningDesc">Twój mod obecnie brakuje jego pliku konfiguracyjnego!\n\nCzy chcesz go automatycznie wygenerować?\n\n(PS: Jeżeli to nie twój mod, wyłącz Tryb Dewelopera, aby zapobiec wyskakiwaniu się tego okienka.)</str>
-
-		<str id="createdTitle">Utworzono konfigurację modu!</str>
-		<str id="createdDesc">Twój plik konfiguracyjny modu został utworzony w {0}!</str>
 	</group>
 </language>
